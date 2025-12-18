@@ -9,4 +9,4 @@
 #SBATCH --partition=standard
 #SBATCH --output=GCM_12_16.log
 module load openmpi
-mpiexec -n 96 uranusnn.release -i uranusnn.inp
+mpiexec --mca coll_hcoll_enable 0 -n 96 uranusnn.release -i uranusnntest.inp

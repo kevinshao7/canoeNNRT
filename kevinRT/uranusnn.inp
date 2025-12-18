@@ -4,31 +4,37 @@ reference = Straka et al., 1993
 configure = --patch=drum --coord=spherical_polar --prob=hjupiter --flux=lmars --nghost=3 --pnetcdf_path=../pnetcdf -pnetcdf -mpi
 
 <job>
-problem_id = rturanus   # problem ID: basename of output filenames
+problem_id = rturanusb   # problem ID: basename of output filenames
 
 <output1>
 file_type  = hst          # History data dump
-dt         = 1E2      # time increment between outputs
+dt         = 5E3      # time increment between outputs
 
 <output2>
 file_type  = netcdf      # Binary data dump
 variable   = prim         # variables to be output
-dt         = 1E2    # time increment between outputs
+dt         = 5E3    # time increment between outputs
 layout     = par
 
 
 <output3>
 file_type  = netcdf
 variable   = uov
-dt         = 1E2
+dt         = 5E3
 layout     = par
 
 
 <output4>
 file_type  = rst
-dt         = 1E2
+dt         = 5E3
+<restart>
+   read_from_restart = true
+   file = "rturanusa.rst"
+</restart>
+
+
 <time>
-cfl_number = 0.05          # The Courant, Friedrichs, & Lewy (CFL) Number
+cfl_number = 0.1          # The Courant, Friedrichs, & Lewy (CFL) Number
 nlim       = -1           # cycle limit
 tlim       = 4E10     # time limit
 xorder     = 5            # horizontal reconstruction order
