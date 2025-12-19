@@ -44,6 +44,7 @@ if(NOT HYDROSTATIC)
   # setup_problem(uranus2w)
   #setup_problem(rturanus)
   setup_problemRT(uranusnn)
+  setup_problemRT(uranusnnx)
 endif()
 
 # 2. Copy input file to run directory
