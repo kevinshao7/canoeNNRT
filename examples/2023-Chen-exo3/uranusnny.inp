@@ -4,7 +4,7 @@ reference = Straka et al., 1993
 configure = --patch=drum --coord=spherical_polar --prob=hjupiter --flux=lmars --nghost=3 --pnetcdf_path=../pnetcdf -pnetcdf -mpi
 
 <job>
-problem_id = rturanusx18   # problem ID: basename of output filenames
+problem_id = rturanus718   # problem ID: basename of output filenames
 
 <output1>
 file_type  = hst          # History data dump
@@ -30,7 +30,7 @@ dt         = 5E3
 
 
 <time>
-cfl_number = 0.5          # The Courant, Friedrichs, & Lewy (CFL) Number
+cfl_number = 0.8          # The Courant, Friedrichs, & Lewy (CFL) Number
 nlim       = -1           # cycle limit
 tlim       = 4E10     # time limit
 xorder     = 5            # horizontal reconstruction order

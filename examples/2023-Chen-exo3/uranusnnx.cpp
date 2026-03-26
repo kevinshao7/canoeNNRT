@@ -162,34 +162,48 @@ torch::Tensor calcglobal(Real lat, Real time){ //return costheta
 
 
 
-torch::Tensor regrid(const std::vector<double>& x,
-                     const std::vector<double>& y,
-                     const std::vector<double>& xq){
-    std::vector<double> result(xq.size());
-    for (int j = 0; j < static_cast<int>(xq.size()); ++j){
-      // Clamp to range 
-      if (xq[j] <= x.front()){
+
+torch::Tensor regrid(const std::vector<double>& x, //x is flexible in size
+                     const std::vector<double>& y, //y is flexible in size
+                     const std::vector<double>& xq){ //xq has size 100
+    std::vector<double> result(256);
+    for (int j = 0; j < 256; ++j){
+      // Clamp to range
+      if (j>=100){
+        result[j] = -9999.0; //padding
+      }else if (xq[j] >= x.front()){
         result[j]= y.front();
-      }else if (xq[j] >= x.back()){
+      }else if (xq[j] <= x.back()){
         result[j]= y.back();
       }else{
-        auto it = std::upper_bound(x.begin(), x.end(), xq[j]);
-      size_t i = std::distance(x.begin(), it) - 1;
-      result[j] = y[i] + (y[i+1] - y[i])*(xq[j] - x[i]) / (x[i+1] - x[i]);
+        auto it = std::upper_bound(x.begin(), x.end(), xq[j],
+                                  std::greater<double>()); // use > for decreasing        
+        size_t i = std::distance(x.begin(), it);
+        if (i == 0) {
+            i = 0;
+        } else {
+            i = i - 1;
+        }
+        // Clamp to avoid going past the last element
+        i = std::min(i, x.size() - 2);
+        // Linear interpolation
+        result[j] = y[i] + (y[i+1] - y[i])*(xq[j] - x[i]) / (x[i+1] - x[i]);
+        // std::cout<<"x[i] xq[j] x[i+1]"<<x[i]<<" "<<xq[j]<<" "<<x[i+1]<<std::endl;
       }
+      // std::cout<<y[j]<<"seq seqinterp"<<result[j]<<std::endl;
     }    
   return torch_normalize_standard(
       torch::tensor(
           result,
           torch::TensorOptions().dtype(torch::kFloat32)
-      ).view({1, 100, 1}),
+      ).view({1, 256, 1}),
       tempmean,
       tempstd
   );
 }
 
 std::vector<double> degrid(const std::vector<double>& x, const torch::Tensor normy, const std::vector<double>& xq){
-  std::vector<double> result(xq.size());
+  std::vector<double> result(100);
   torch::Tensor ytens = torch_denormalize_symlog(normy,heatthr,heatsf);
   ytens = ytens.contiguous().to(torch::kFloat64);
 
@@ -200,16 +214,26 @@ std::vector<double> degrid(const std::vector<double>& x, const torch::Tensor nor
   std::vector<double> y(numel);
   std::memcpy(y.data(), ytens.data_ptr<double>(), numel * sizeof(double));
 
-  for (int j = 0; j < static_cast<int>(xq.size()); ++j){
+  for (int j = 0; j < 100; ++j){
     // Clamp to range 
-    if (xq[j] <= x.front()){
+    if (xq[j] >= x.front()){
       result[j]= y.front();
-    }else if (xq[j] >= x.back()){
+    }else if (xq[j] <= x.back()){
       result[j]= y.back();
     }else{
-      auto it = std::upper_bound(x.begin(), x.end(), xq[j]);
-    size_t i = std::distance(x.begin(), it) - 1;
-    result[j] = y[i] + (y[i+1] - y[i])*(xq[j] - x[i]) / (x[i+1] - x[i]);
+      auto it = std::upper_bound(x.begin(), x.end(), xq[j],
+                                std::greater<double>()); // use > for decreasing        
+      size_t i = std::distance(x.begin(), it);
+      if (i == 0) {
+          i = 0;
+      } else {
+          i = i - 1;
+      }
+      // Clamp to avoid going past the last element
+      i = std::min(i, x.size() - 2);
+      // Linear interpolation
+      result[j] = y[i] + (y[i+1] - y[i])*(xq[j] - x[i]) / (x[i+1] - x[i]);
+      // std::cout<<"x[i] xq[j] x[i+1]"<<x[i]<<" "<<xq[j]<<" "<<x[i+1]<<std::endl;
     }
   }
   return result;    
@@ -251,13 +275,13 @@ void Forcing(MeshBlock *pmb, Real const time, Real const dt,
       } 
 
     // Heating   
-  torch::jit::script::Module module = torch::jit::load("model.pt");
+  torch::jit::script::Module module = torch::jit::load("best_model_12_19.pt");
   module.eval(); //lower bound of RT is 4 bar
 
 
   current_dt = dt;
-  Real boosrad = std::fmax(1.0,1e6*exp(time/(-1e4)));
-  std::vector<double> basepress(100);
+  Real boostrad = std::fmax(1.0,5e5*exp(time/(-1e4)));
+  std::vector<double> basepress = { 474464.0, 444378.0, 416200.0, 389808.0, 365090.0, 341939.0, 320256.0, 299948.0, 280928.0, 263114.0, 246430.0, 230804.0, 216168.0, 202461.0, 189622.0, 177598.0, 166337.0, 155789.0, 145910.0, 136658.0, 127992.0, 119876.0, 112275.0, 105155.0, 98487.2, 92242.1, 86392.9, 80914.6, 75783.7, 70978.2, 66477.4, 62262.0, 58313.9, 54616.2, 51152.9, 47909.2, 44871.3, 42025.9, 39361.0, 36865.1, 34527.4, 32338.0, 30287.4, 28366.9, 26568.1, 24883.4, 23305.5, 21827.7, 20443.6, 19147.2, 17933.1, 16795.9, 15730.9, 14733.4, 13799.1, 12924.1, 12104.5, 11337.0, 10618.1, 9944.8, 9314.2, 8723.6, 8170.4, 7652.3, 7167.1, 6712.6, 6286.9, 5888.3, 5514.9, 5165.2, 4837.7, 4530.9, 4243.6, 3974.5, 3722.5, 3486.4, 3265.3, 3058.3, 2864.4, 2682.7, 2512.6, 2353.3, 2204.1, 2064.3, 1933.4, 1810.8, 1696.0, 1588.4, 1487.7, 1393.4, 1305.0, 1222.3, 1144.8, 1072.2, 1004.2, 940.5, 880.9, 825.0, 772.7, 723.7 };
   std::vector<double> regridtemp(100);
   std::vector<double> pressvec(pmb->ie - pmb->is + 1);
   std::vector<double> tempvec(pmb->ie - pmb->is + 1);
@@ -272,20 +296,26 @@ void Forcing(MeshBlock *pmb, Real const time, Real const dt,
         torch::Tensor regridtemp = regrid(pressvec,tempvec,basepress);//normalize and regrid
         Real lat, lon;
         pexo3->GetLatLon(&lat, &lon, k, j, pmb->is);
+        auto mask = torch::ones({1, 256}, torch::kBool);
+        mask.index_put_({0, torch::indexing::Slice(0, 100)}, false);
         torch::Tensor global_features = calcglobal(lat,time); //normalized global features
         std::vector<torch::jit::IValue> inputs;
         inputs.push_back(regridtemp);           // required
         inputs.push_back(global_features);    // optional global_features
-        inputs.push_back(c10::nullopt);       // optional sequence_mask = None
+        inputs.push_back(mask);
 
         // Forward pass
         torch::Tensor output = module.forward(inputs).toTensor();
         //de normalize and deinterpolate
         heating = degrid(basepress,output,pressvec);//pressure decreases, heigh increases with increasing index          
         for (int i = pmb->is; i <= pmb->ie; ++i){
-            du(IEN, k, j, i) +=dt*(cp - Rd)*w(IDN, k, j, i)*heating[i-pmb->is];
+          if ((pmb->phydro->w(IPR, k, j,i) / pmb->phydro->w(IDN, k, j,i) / Rd) >= 30){
+            du(IEN, k, j, i) +=dt*boostrad*(cp - Rd)*w(IDN, k, j, i)*heating[i-pmb->is];
+          }
         }
-      }                                                                   
+        // std::cout<<heating[0]<<" "<<heating[1]<<" "<<heating[2]<<std::endl;
+      }       
+                                                              
 }
 
 Real AngularMomentum(MeshBlock *pmb, int iout) {
@@ -542,37 +572,17 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
   auto pexo3 = pimpl->pexo3;
   auto pthermo = Thermodynamics::GetInstance();
       // Heating   
-  torch::jit::script::Module module = torch::jit::load("model.pt");
-  module.eval(); //lower bound of RT is 4 barssss
-  std::vector<double> basepress(100);
+  torch::jit::script::Module module = torch::jit::load("best_model_12_19.pt");
+  module.eval(); //lower bound of RT is 4 bar
+
+  Real time = pmb->pmy_mesh->time;
+  Real boostrad = std::fmax(1.0,5e5*exp(time/(-1e4)));
+  std::vector<double> basepress = { 474464.0, 444378.0, 416200.0, 389808.0, 365090.0, 341939.0, 320256.0, 299948.0, 280928.0, 263114.0, 246430.0, 230804.0, 216168.0, 202461.0, 189622.0, 177598.0, 166337.0, 155789.0, 145910.0, 136658.0, 127992.0, 119876.0, 112275.0, 105155.0, 98487.2, 92242.1, 86392.9, 80914.6, 75783.7, 70978.2, 66477.4, 62262.0, 58313.9, 54616.2, 51152.9, 47909.2, 44871.3, 42025.9, 39361.0, 36865.1, 34527.4, 32338.0, 30287.4, 28366.9, 26568.1, 24883.4, 23305.5, 21827.7, 20443.6, 19147.2, 17933.1, 16795.9, 15730.9, 14733.4, 13799.1, 12924.1, 12104.5, 11337.0, 10618.1, 9944.8, 9314.2, 8723.6, 8170.4, 7652.3, 7167.1, 6712.6, 6286.9, 5888.3, 5514.9, 5165.2, 4837.7, 4530.9, 4243.6, 3974.5, 3722.5, 3486.4, 3265.3, 3058.3, 2864.4, 2682.7, 2512.6, 2353.3, 2204.1, 2064.3, 1933.4, 1810.8, 1696.0, 1588.4, 1487.7, 1393.4, 1305.0, 1222.3, 1144.8, 1072.2, 1004.2, 940.5, 880.9, 825.0, 772.7, 723.7 };
   std::vector<double> regridtemp(100);
   std::vector<double> pressvec(pmb->ie - pmb->is + 1);
   std::vector<double> tempvec(pmb->ie - pmb->is + 1);
   std::vector<double> heating(pmb->ie - pmb->is + 1); // kelvin/sec
-  for (int k = pmb->ks; k <= pmb->ke; ++k) //last index is vertical
-      for (int j = pmb->js; j <= pmb->je; ++j) {
-        for (int i = pmb->is; i <= pmb->ie; ++i){
-          pressvec[i-pmb->is] = pmb->phydro->w(IPR, k, j,i);
-          tempvec[i-pmb->is] = pmb->phydro->w(IPR, k, j,i) / pmb->phydro->w(IDN, k, j,i) / Rd;
-        }
-        //interpolate and normalize
-        torch::Tensor regridtemp = regrid(pressvec,tempvec,basepress);//normalize and regrid
-        Real lat, lon;
-        pexo3->GetLatLon(&lat, &lon, k, j, pmb->is);
-        torch::Tensor global_features = calcglobal(lat,pmb->pmy_mesh->time); //normalized global features
-        std::vector<torch::jit::IValue> inputs;
-        inputs.push_back(regridtemp);           // required
-        inputs.push_back(global_features);    // optional global_features
-        inputs.push_back(c10::nullopt);       // optional sequence_mask = None
-
-        // Forward pass
-        torch::Tensor output = module.forward(inputs).toTensor();
-        //de normalize and deinterpolate
-        heating = degrid(basepress,output,pressvec);//pressure decreases, heigh increases with increasing index          
-        for (int i = pmb->is; i <= pmb->ie; ++i){
-            user_out_var(6, k, j, i) +=heating[i-pmb->is];
-        }
-      }           
+            
   
   for (int k = ks; k <= ke; ++k)
     for (int j = js; j <= je; ++j)
@@ -593,5 +603,35 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
         user_out_var(4, k, j, i) = U;
         user_out_var(5, k, j, i) = V;
       }
+  for (int k = pmb->ks; k <= pmb->ke; ++k) //last index is vertical
+    for (int j = pmb->js; j <= pmb->je; ++j) {
+      for (int i = pmb->is; i <= pmb->ie; ++i){
+        pressvec[i-pmb->is] = pmb->phydro->w(IPR, k, j,i);
+        tempvec[i-pmb->is] = pmb->phydro->w(IPR, k, j,i) / pmb->phydro->w(IDN, k, j,i) / Rd;
+      }
+      //interpolate and normalize
+      torch::Tensor regridtemp = regrid(pressvec,tempvec,basepress);//normalize and regrid
+      Real lat, lon;
+      pexo3->GetLatLon(&lat, &lon, k, j, pmb->is);
+      auto mask = torch::ones({1, 256}, torch::kBool);
+      mask.index_put_({0, torch::indexing::Slice(0, 100)}, false);
+      torch::Tensor global_features = calcglobal(lat,time); //normalized global features
+      std::vector<torch::jit::IValue> inputs;
+      inputs.push_back(regridtemp);           // required
+      inputs.push_back(global_features);    // optional global_features
+      inputs.push_back(mask);
+      // Forward pass
+      torch::Tensor output = module.forward(inputs).toTensor();
+      //de normalize and deinterpolate
+      heating = degrid(basepress,output,pressvec);//pressure decreases, heigh increases with increasing index          
+      for (int i = pmb->is; i <= pmb->ie; ++i){
+        if (user_out_var(0, k, j, i ) >= 30){
+          user_out_var(6, k, j, i) =boostrad*heating[i-pmb->is];
+        }else{
+          user_out_var(6, k, j, i) = 0;
+        }
+      }
+      // std::cout<<heating[0]<<" "<<heating[1]<<" "<<heating[2]<<std::endl;
+    }  
 }
 
